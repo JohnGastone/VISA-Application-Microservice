@@ -1,0 +1,119 @@
+/**
+ * Domain types shared by the UI and the BFF route handlers.
+ * These mirror the microservice contracts described in docs/API.md.
+ */
+
+export const APPLICATION_STATUSES = [
+  "PENDING",
+  "BACKGROUND_CLEARED",
+  "BACKGROUND_FAILED",
+  "PAYMENT_CLEARED",
+  "PAYMENT_FAILED",
+  "ACCEPTED",
+] as const;
+
+export type ApplicationStatus = (typeof APPLICATION_STATUSES)[number];
+
+export const VISA_TYPES = ["TOURIST", "BUSINESS", "STUDENT"] as const;
+export type VisaType = (typeof VISA_TYPES)[number];
+
+export const GENDERS = ["MALE", "FEMALE", "OTHER"] as const;
+export type Gender = (typeof GENDERS)[number];
+
+export type BackgroundCheckStatus = "CLEARED" | "FAILED";
+export type PaymentStatus = "SUCCESS" | "FAILED";
+
+export interface Applicant {
+  id: string;
+  fullname: string;
+  passportNumber: string;
+  country: string;
+  gender: Gender;
+  phone: string;
+  email: string;
+}
+
+export interface BackgroundCheck {
+  id: string;
+  applicationId: string;
+  status: BackgroundCheckStatus;
+  remarks: string;
+  checkDate: string;
+  checkedBy: string;
+}
+
+export interface PaymentTransaction {
+  id: string;
+  applicationId: string;
+  paymentReference: string;
+  amount: number;
+  currency: "TZS";
+  paymentStatus: PaymentStatus;
+  paymentDate: string;
+}
+
+export interface VisaApplication {
+  id: string;
+  applicantId: string;
+  applicant: Applicant;
+  applicationDate: string;
+  visaType: VisaType;
+  expireDate: string;
+  status: ApplicationStatus;
+  feeAmount: number;
+  backgroundCheck: BackgroundCheck | null;
+  payments: PaymentTransaction[];
+}
+
+/** Payload accepted by `POST /api/applications`. */
+export interface SubmitApplicationPayload {
+  applicant: Omit<Applicant, "id">;
+  visaType: VisaType;
+  expireDate: string;
+}
+
+/** Visa fee schedule, in TZS. */
+export const VISA_FEES: Record<VisaType, number> = {
+  TOURIST: 130_000,
+  BUSINESS: 650_000,
+  STUDENT: 260_000,
+};
+
+/** Statuses from which no further workflow action is possible. */
+export const TERMINAL_STATUSES: ApplicationStatus[] = [
+  "BACKGROUND_FAILED",
+  "ACCEPTED",
+];
+
+export function isTerminal(status: ApplicationStatus): boolean {
+  return TERMINAL_STATUSES.includes(status);
+}
+
+export function formatTzs(amount: number): string {
+  return new Intl.NumberFormat("en-TZ", {
+    style: "currency",
+    currency: "TZS",
+    currencyDisplay: "code",
+    maximumFractionDigits: 0,
+  })
+    .format(amount)
+    .replace("TZS", "TZS ");
+}
+
+export function formatDateTime(iso: string): string {
+  return new Date(iso).toLocaleString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+export function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
