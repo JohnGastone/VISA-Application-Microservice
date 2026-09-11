@@ -1,0 +1,256 @@
+import type { Metadata } from "next";
+import { Erd } from "@/components/Erd";
+import { StatusBadge } from "@/components/StatusBadge";
+import { Card, CardHeader } from "@/components/ui";
+import { APPLICATION_STATUSES, VISA_FEES, formatTzs } from "@/lib/types";
+
+export const metadata: Metadata = {
+  title: "ERD & API · Visa Application Portal",
+  description:
+    "Entity relationship diagram and REST API reference for the visa application microservices.",
+};
+
+const SERVICES = [
+  {
+    name: "Application Service",
+    owns: "applicant, visa_application, application_event",
+    role: "Creates applicant profiles and applications, orchestrates the workflow and owns the status field.",
+  },
+  {
+    name: "Security & Background Service",
+    owns: "background_check",
+    role: "Screens the applicant and reports CLEARED or FAILED back to the Application Service.",
+  },
+  {
+    name: "Payment Service",
+    owns: "payment_trxn",
+    role: "Charges the visa fee in TZS and reports SUCCESS or FAILED per transaction.",
+  },
+];
+
+const ENDPOINTS = [
+  {
+    method: "GET",
+    path: "/api/applications",
+    purpose: "List every application with its applicant, check and payments.",
+    response: "200 VisaApplication[]",
+  },
+  {
+    method: "POST",
+    path: "/api/applications",
+    purpose:
+      "Create the applicant profile and a visa application with status PENDING.",
+    response: "201 VisaApplication · 422 field errors",
+  },
+  {
+    method: "GET",
+    path: "/api/applications/{id}",
+    purpose: "Fetch one application for the status page.",
+    response: "200 VisaApplication · 404",
+  },
+  {
+    method: "POST",
+    path: "/api/applications/{id}/background-check",
+    purpose:
+      "Ask the Security Service to screen the applicant. Moves PENDING to BACKGROUND_CLEARED or BACKGROUND_FAILED.",
+    response: "200 VisaApplication · 409 wrong status",
+  },
+  {
+    method: "POST",
+    path: "/api/applications/{id}/payments",
+    purpose:
+      "Charge the fee. Moves BACKGROUND_CLEARED to PAYMENT_CLEARED then ACCEPTED, or to PAYMENT_FAILED.",
+    response: "201 VisaApplication · 409 wrong status",
+  },
+];
+
+const TRANSITIONS = [
+  { from: "—", event: "Application submitted", to: "PENDING" },
+  { from: "PENDING", event: "Background check cleared", to: "BACKGROUND_CLEARED" },
+  { from: "PENDING", event: "Background check flagged", to: "BACKGROUND_FAILED" },
+  { from: "BACKGROUND_CLEARED", event: "Payment succeeded", to: "PAYMENT_CLEARED" },
+  { from: "BACKGROUND_CLEARED", event: "Payment declined", to: "PAYMENT_FAILED" },
+  { from: "PAYMENT_FAILED", event: "Payment retried and succeeded", to: "PAYMENT_CLEARED" },
+  { from: "PAYMENT_CLEARED", event: "Visa issued", to: "ACCEPTED" },
+];
+
+export default function DocsPage() {
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-xl font-semibold tracking-tight">
+          ERD &amp; API reference
+        </h1>
+        <p className="mt-1 max-w-2xl text-sm text-muted">
+          The schema and endpoints this SPA is built against. The UI talks only
+          to its own <code className="font-mono text-xs">/api/*</code> routes,
+          which forward to the Application Service when{" "}
+          <code className="font-mono text-xs">APPLICATION_SERVICE_URL</code> is
+          configured and otherwise serve an in-memory simulation.
+        </p>
+      </div>
+
+      <Card>
+        <CardHeader
+          title="Services"
+          description="Three independent services, each owning its own tables."
+        />
+        <div className="grid gap-4 px-5 py-5 sm:grid-cols-3">
+          {SERVICES.map((service) => (
+            <div key={service.name}>
+              <p className="text-sm font-semibold">{service.name}</p>
+              <p className="mt-1 font-mono text-[11px] text-accent">
+                {service.owns}
+              </p>
+              <p className="mt-2 text-xs text-muted">{service.role}</p>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      <Card>
+        <CardHeader
+          title="Entity relationship diagram"
+          description="PK primary key · FK foreign key · UQ unique constraint"
+        />
+        <div className="overflow-x-auto px-5 py-5">
+          <Erd />
+        </div>
+        <p className="border-t border-line px-5 py-3 text-xs text-muted">
+          <code className="font-mono">application_event</code> is the one
+          supporting table added beyond the specified schema; it stores the
+          append-only audit trail rendered as the workflow timeline.
+        </p>
+      </Card>
+
+      <Card>
+        <CardHeader
+          title="Status workflow"
+          description="The status column on visa_application follows exactly these transitions."
+        />
+        <div className="flex flex-wrap gap-2 px-5 py-4">
+          {APPLICATION_STATUSES.map((status) => (
+            <StatusBadge key={status} status={status} showRaw />
+          ))}
+        </div>
+        <div className="overflow-x-auto border-t border-line">
+          <table className="w-full min-w-lg border-collapse text-sm">
+            <thead>
+              <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-muted">
+                <th scope="col" className="px-5 py-2.5 font-semibold">From</th>
+                <th scope="col" className="px-5 py-2.5 font-semibold">Event</th>
+                <th scope="col" className="px-5 py-2.5 font-semibold">To</th>
+              </tr>
+            </thead>
+            <tbody>
+              {TRANSITIONS.map((row) => (
+                <tr
+                  key={`${row.from}-${row.to}-${row.event}`}
+                  className="border-b border-line last:border-0"
+                >
+                  <td className="px-5 py-2.5 font-mono text-xs">{row.from}</td>
+                  <td className="px-5 py-2.5 text-muted">{row.event}</td>
+                  <td className="px-5 py-2.5 font-mono text-xs">{row.to}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      <Card>
+        <CardHeader
+          title="REST endpoints"
+          description="Consumed by the SPA; mirrored by the Application Service under /api/v1."
+        />
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-2xl border-collapse text-sm">
+            <thead>
+              <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-muted">
+                <th scope="col" className="px-5 py-2.5 font-semibold">Method</th>
+                <th scope="col" className="px-5 py-2.5 font-semibold">Path</th>
+                <th scope="col" className="px-5 py-2.5 font-semibold">Purpose</th>
+                <th scope="col" className="px-5 py-2.5 font-semibold">Response</th>
+              </tr>
+            </thead>
+            <tbody>
+              {ENDPOINTS.map((endpoint) => (
+                <tr
+                  key={`${endpoint.method}-${endpoint.path}`}
+                  className="border-b border-line last:border-0 align-top"
+                >
+                  <td className="px-5 py-3">
+                    <span
+                      className={`rounded px-1.5 py-0.5 font-mono text-[11px] font-bold ${
+                        endpoint.method === "GET"
+                          ? "bg-sky-100 text-sky-800 dark:bg-sky-500/15 dark:text-sky-300"
+                          : "bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300"
+                      }`}
+                    >
+                      {endpoint.method}
+                    </span>
+                  </td>
+                  <td className="px-5 py-3 font-mono text-xs">{endpoint.path}</td>
+                  <td className="px-5 py-3 text-muted">{endpoint.purpose}</td>
+                  <td className="px-5 py-3 font-mono text-[11px]">
+                    {endpoint.response}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="border-t border-line px-5 py-3 text-xs text-muted">
+          The machine-readable contract is served at{" "}
+          <a
+            href="/openapi.json"
+            className="font-mono text-accent hover:underline"
+          >
+            /openapi.json
+          </a>{" "}
+          and can be pasted straight into Swagger UI.
+        </p>
+      </Card>
+
+      <Card>
+        <CardHeader
+          title="Fee schedule"
+          description="Charged by the Payment Service in Tanzanian Shillings."
+        />
+        <dl className="grid gap-4 px-5 py-5 sm:grid-cols-3">
+          {Object.entries(VISA_FEES).map(([type, amount]) => (
+            <div key={type}>
+              <dt className="text-xs text-muted">{type}</dt>
+              <dd className="mt-0.5 text-lg font-semibold tracking-tight">
+                {formatTzs(amount)}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      </Card>
+
+      <Card>
+        <CardHeader
+          title="Demo screening rules"
+          description="The simulated Security Service is deterministic so demos repeat."
+        />
+        <ul className="list-disc space-y-1.5 px-5 py-4 pl-9 text-sm text-muted">
+          <li>
+            A passport number starting with{" "}
+            <code className="font-mono text-xs">X</code>, or a full name
+            containing &ldquo;flag&rdquo;, is treated as a watch-list hit and
+            fails the check.
+          </li>
+          <li>Every other applicant clears.</li>
+          <li>
+            Payments succeed unless{" "}
+            <em>Simulate a declined payment</em> is ticked on the payment form,
+            which exercises the{" "}
+            <code className="font-mono text-xs">PAYMENT_FAILED</code> branch and
+            the retry path.
+          </li>
+        </ul>
+      </Card>
+    </div>
+  );
+}

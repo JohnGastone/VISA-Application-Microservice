@@ -1,0 +1,412 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Visa Application Portal API",
+    "version": "1.0.0",
+    "description": "Endpoints consumed by the visa application SPA. The frontend calls these BFF routes, which either forward to the Application Service (when APPLICATION_SERVICE_URL is set, under /api/v1) or serve an in-memory simulation of the three microservices."
+  },
+  "servers": [{ "url": "/api", "description": "Frontend BFF" }],
+  "tags": [
+    { "name": "Applications", "description": "Application Service" },
+    { "name": "Background", "description": "Security & Background Service" },
+    { "name": "Payments", "description": "Payment Service" }
+  ],
+  "paths": {
+    "/applications": {
+      "get": {
+        "tags": ["Applications"],
+        "summary": "List all visa applications",
+        "responses": {
+          "200": {
+            "description": "Applications, newest first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/VisaApplication" }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["Applications"],
+        "summary": "Submit an application",
+        "description": "Creates the applicant profile (reusing the existing one when the passport number is already known) and a visa application with status PENDING.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/SubmitApplication" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/VisaApplication" }
+              }
+            }
+          },
+          "409": {
+            "description": "The passport already has an application in progress",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/applications/{id}": {
+      "get": {
+        "tags": ["Applications"],
+        "summary": "Fetch one application",
+        "parameters": [{ "$ref": "#/components/parameters/ApplicationId" }],
+        "responses": {
+          "200": {
+            "description": "The application, with its background check, payments and event trail",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/VisaApplication" }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/applications/{id}/background-check": {
+      "post": {
+        "tags": ["Background"],
+        "summary": "Run the automated background check",
+        "description": "Only valid while the application is PENDING. Sets BACKGROUND_CLEARED or BACKGROUND_FAILED.",
+        "parameters": [{ "$ref": "#/components/parameters/ApplicationId" }],
+        "responses": {
+          "200": {
+            "description": "The updated application",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/VisaApplication" }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "409": {
+            "description": "The application is not PENDING",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/applications/{id}/payments": {
+      "post": {
+        "tags": ["Payments"],
+        "summary": "Pay the visa fee",
+        "description": "Only valid from BACKGROUND_CLEARED or PAYMENT_FAILED. A successful charge sets PAYMENT_CLEARED and then ACCEPTED; a declined one sets PAYMENT_FAILED and may be retried.",
+        "parameters": [{ "$ref": "#/components/parameters/ApplicationId" }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/PaymentRequest" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The updated application, including the new transaction",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/VisaApplication" }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "409": {
+            "description": "Payment is not allowed from the current status",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "parameters": {
+      "ApplicationId": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "description": "Visa application id",
+        "schema": { "type": "string", "format": "uuid" }
+      }
+    },
+    "schemas": {
+      "ApplicationStatus": {
+        "type": "string",
+        "enum": [
+          "PENDING",
+          "BACKGROUND_CLEARED",
+          "BACKGROUND_FAILED",
+          "PAYMENT_CLEARED",
+          "PAYMENT_FAILED",
+          "ACCEPTED"
+        ]
+      },
+      "VisaType": {
+        "type": "string",
+        "enum": ["TOURIST", "BUSINESS", "STUDENT"]
+      },
+      "Applicant": {
+        "type": "object",
+        "required": [
+          "id",
+          "fullname",
+          "passportNumber",
+          "country",
+          "gender",
+          "phone",
+          "email"
+        ],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "fullname": { "type": "string", "example": "Amina Hassan" },
+          "passportNumber": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9]{6,12}$",
+            "example": "TZ4471203"
+          },
+          "country": { "type": "string", "example": "Tanzania" },
+          "gender": {
+            "type": "string",
+            "enum": ["MALE", "FEMALE", "OTHER"]
+          },
+          "phone": { "type": "string", "example": "+255 712 345 678" },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "example": "amina.hassan@example.com"
+          }
+        }
+      },
+      "BackgroundCheck": {
+        "type": "object",
+        "required": [
+          "id",
+          "applicationId",
+          "status",
+          "remarks",
+          "checkDate",
+          "checkedBy"
+        ],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "applicationId": { "type": "string", "format": "uuid" },
+          "status": { "type": "string", "enum": ["CLEARED", "FAILED"] },
+          "remarks": { "type": "string" },
+          "checkDate": { "type": "string", "format": "date-time" },
+          "checkedBy": { "type": "string", "example": "SYSTEM_AUTO" }
+        }
+      },
+      "PaymentTransaction": {
+        "type": "object",
+        "required": [
+          "id",
+          "applicationId",
+          "paymentReference",
+          "amount",
+          "currency",
+          "paymentStatus",
+          "paymentDate"
+        ],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "applicationId": { "type": "string", "format": "uuid" },
+          "paymentReference": { "type": "string", "example": "TZS-2026-00001" },
+          "amount": { "type": "number", "format": "double", "example": 130000 },
+          "currency": { "type": "string", "enum": ["TZS"] },
+          "paymentStatus": { "type": "string", "enum": ["SUCCESS", "FAILED"] },
+          "paymentDate": { "type": "string", "format": "date-time" }
+        }
+      },
+      "ApplicationEvent": {
+        "type": "object",
+        "required": [
+          "id",
+          "applicationId",
+          "type",
+          "message",
+          "status",
+          "createdAt",
+          "actor"
+        ],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "applicationId": { "type": "string", "format": "uuid" },
+          "type": {
+            "type": "string",
+            "enum": [
+              "SUBMITTED",
+              "BACKGROUND_CHECK",
+              "PAYMENT",
+              "STATUS_CHANGE",
+              "DECISION"
+            ]
+          },
+          "message": { "type": "string" },
+          "status": { "$ref": "#/components/schemas/ApplicationStatus" },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "actor": { "type": "string", "example": "SYSTEM_AUTO" }
+        }
+      },
+      "VisaApplication": {
+        "type": "object",
+        "required": [
+          "id",
+          "applicantId",
+          "applicant",
+          "applicationDate",
+          "visaType",
+          "expireDate",
+          "status",
+          "feeAmount",
+          "backgroundCheck",
+          "payments",
+          "events"
+        ],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "applicantId": { "type": "string", "format": "uuid" },
+          "applicant": { "$ref": "#/components/schemas/Applicant" },
+          "applicationDate": { "type": "string", "format": "date-time" },
+          "visaType": { "$ref": "#/components/schemas/VisaType" },
+          "expireDate": { "type": "string", "format": "date" },
+          "status": { "$ref": "#/components/schemas/ApplicationStatus" },
+          "feeAmount": { "type": "number", "format": "double" },
+          "backgroundCheck": {
+            "allOf": [{ "$ref": "#/components/schemas/BackgroundCheck" }],
+            "nullable": true
+          },
+          "payments": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/PaymentTransaction" }
+          },
+          "events": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/ApplicationEvent" }
+          }
+        }
+      },
+      "SubmitApplication": {
+        "type": "object",
+        "required": ["applicant", "visaType", "expireDate"],
+        "properties": {
+          "applicant": {
+            "type": "object",
+            "required": [
+              "fullname",
+              "passportNumber",
+              "country",
+              "gender",
+              "phone",
+              "email"
+            ],
+            "properties": {
+              "fullname": { "type": "string" },
+              "passportNumber": { "type": "string" },
+              "country": { "type": "string" },
+              "gender": {
+                "type": "string",
+                "enum": ["MALE", "FEMALE", "OTHER"]
+              },
+              "phone": { "type": "string" },
+              "email": { "type": "string", "format": "email" }
+            }
+          },
+          "visaType": { "$ref": "#/components/schemas/VisaType" },
+          "expireDate": { "type": "string", "format": "date" }
+        }
+      },
+      "PaymentRequest": {
+        "type": "object",
+        "required": ["method", "payerReference"],
+        "properties": {
+          "method": {
+            "type": "string",
+            "enum": ["MOBILE_MONEY", "CARD", "BANK_TRANSFER"]
+          },
+          "payerReference": {
+            "type": "string",
+            "description": "Paying phone number, card number or bank account"
+          },
+          "simulateFailure": {
+            "type": "boolean",
+            "default": false,
+            "description": "Demo switch that forces the charge to be declined"
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "required": ["message"],
+        "properties": {
+          "message": { "type": "string" },
+          "fields": {
+            "type": "object",
+            "additionalProperties": { "type": "string" },
+            "description": "Per-field validation messages, keyed by field name"
+          }
+        }
+      }
+    }
+  }
+}
