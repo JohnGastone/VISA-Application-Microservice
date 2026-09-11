@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { ApiError, api, type PaymentInput } from "@/lib/api";
 import {
   formatDate,
@@ -28,40 +28,21 @@ const METHOD_LABELS: Record<PaymentInput["method"], string> = {
 };
 
 export function ApplicationDetail({
-  id,
+  initial,
   justSubmitted,
 }: {
-  id: string;
+  initial: VisaApplication;
   justSubmitted: boolean;
 }) {
-  const [application, setApplication] = useState<VisaApplication | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [application, setApplication] = useState(initial);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [working, setWorking] = useState<"check" | "payment" | null>(null);
-
-  const load = useCallback(async () => {
-    try {
-      setApplication(await api.getApplication(id));
-      setLoadError(null);
-    } catch (caught) {
-      setLoadError(
-        caught instanceof ApiError
-          ? caught.message
-          : "Could not load this application.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [id]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
+  const [working, setWorking] = useState<"check" | "payment" | "refresh" | null>(
+    null,
+  );
 
   /** Runs a workflow action and folds the returned application into state. */
   async function run(
-    kind: "check" | "payment",
+    kind: "check" | "payment" | "refresh",
     action: () => Promise<VisaApplication>,
   ) {
     setWorking(kind);
@@ -77,27 +58,6 @@ export function ApplicationDetail({
     } finally {
       setWorking(null);
     }
-  }
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center gap-2 py-24 text-sm text-muted">
-        <Spinner /> Loading application…
-      </div>
-    );
-  }
-
-  if (loadError || !application) {
-    return (
-      <div className="mx-auto max-w-lg space-y-4 py-16 text-center">
-        <Alert tone="error" title="Application not found">
-          {loadError ?? "This application does not exist."}
-        </Alert>
-        <Link href="/" className="text-sm font-semibold text-accent hover:underline">
-          ← Back to dashboard
-        </Link>
-      </div>
-    );
   }
 
   const { applicant, backgroundCheck, payments, status } = application;
@@ -120,7 +80,13 @@ export function ApplicationDetail({
           </div>
           <div className="flex items-center gap-3">
             <StatusBadge status={status} showRaw />
-            <Button variant="secondary" onClick={() => void load()}>
+            <Button
+              variant="secondary"
+              loading={working === "refresh"}
+              onClick={() =>
+                void run("refresh", () => api.getApplication(application.id))
+              }
+            >
               Refresh
             </Button>
           </div>
