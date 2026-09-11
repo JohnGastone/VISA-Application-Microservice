@@ -52,6 +52,25 @@ export interface PaymentTransaction {
   paymentDate: string;
 }
 
+/**
+ * Supporting table `application_event`: an append-only audit trail of the
+ * workflow, used to render the timeline on the status page.
+ */
+export interface ApplicationEvent {
+  id: string;
+  applicationId: string;
+  type:
+    | "SUBMITTED"
+    | "BACKGROUND_CHECK"
+    | "PAYMENT"
+    | "STATUS_CHANGE"
+    | "DECISION";
+  message: string;
+  status: ApplicationStatus;
+  createdAt: string;
+  actor: string;
+}
+
 export interface VisaApplication {
   id: string;
   applicantId: string;
@@ -63,6 +82,7 @@ export interface VisaApplication {
   feeAmount: number;
   backgroundCheck: BackgroundCheck | null;
   payments: PaymentTransaction[];
+  events: ApplicationEvent[];
 }
 
 /** Payload accepted by `POST /api/applications`. */
