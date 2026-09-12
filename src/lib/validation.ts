@@ -13,8 +13,11 @@ import {
 export const EMAIL_PATTERN =
   /^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$/;
 
-/** Passport numbers: 6-12 alphanumerics, e.g. AB1234567. */
-export const PASSPORT_PATTERN = /^[A-Za-z0-9]{6,12}$/;
+/**
+ * Passport numbers: 4-20 alphanumerics, e.g. P1234567. Kept deliberately
+ * permissive to match what the services accept.
+ */
+export const PASSPORT_PATTERN = /^[A-Za-z0-9]{4,20}$/;
 
 /** E.164-ish: optional +, 9-20 digits, spaces and dashes tolerated. */
 export const PHONE_PATTERN = /^\+?[0-9][0-9\s-]{7,18}[0-9]$/;
@@ -64,7 +67,7 @@ export function validateField(
     case "passportNumber":
       if (!trimmed) return "Passport number is required.";
       if (!PASSPORT_PATTERN.test(trimmed))
-        return "Passport number must be 6-12 letters or digits.";
+        return "Passport number must be 4-20 letters or digits.";
       return "";
 
     case "country":

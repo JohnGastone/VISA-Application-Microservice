@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { ApiError, api } from "@/lib/api";
-import { GENDERS, VISA_FEES, VISA_TYPES, formatTzs } from "@/lib/types";
+import { GENDERS, VISA_TYPES } from "@/lib/types";
 import {
   COUNTRIES,
   EMPTY_FORM,
@@ -51,10 +51,6 @@ export default function ApplyPage() {
 
   const errorFor = (field: keyof ApplicationFormValues) =>
     errors[field] || undefined;
-
-  const fee = values.visaType
-    ? VISA_FEES[values.visaType as keyof typeof VISA_FEES]
-    : null;
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -143,7 +139,7 @@ export default function ApplyPage() {
               id="passportNumber"
               label="Passport number"
               required
-              hint="6-12 letters or digits, must be unique."
+              hint="Letters and digits, must be unique."
               error={errorFor("passportNumber")}
             >
               <input
@@ -161,7 +157,7 @@ export default function ApplyPage() {
                   update("passportNumber", event.target.value.toUpperCase())
                 }
                 onBlur={() => blur("passportNumber")}
-                placeholder="TZ4471203"
+                placeholder="P1234567"
               />
             </Field>
 
@@ -291,7 +287,7 @@ export default function ApplyPage() {
                 <option value="">Select a visa type</option>
                 {VISA_TYPES.map((type) => (
                   <option key={type} value={type}>
-                    {type} — {formatTzs(VISA_FEES[type])}
+                    {type}
                   </option>
                 ))}
               </select>
@@ -320,18 +316,10 @@ export default function ApplyPage() {
             </Field>
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line bg-surface-muted px-5 py-4">
-            <div>
-              <p className="text-xs text-muted">Application fee</p>
-              <p className="text-lg font-semibold tracking-tight">
-                {fee === null ? "—" : formatTzs(fee)}
-              </p>
-            </div>
-            <p className="max-w-xs text-xs text-muted">
-              Payable only after the background check clears. Nothing is charged
-              now.
-            </p>
-          </div>
+          <p className="border-t border-line bg-surface-muted px-5 py-4 text-xs text-muted">
+            The fee is set by the Payment Service and quoted once the background
+            check clears. Nothing is charged now.
+          </p>
         </Card>
 
         <div className="flex flex-wrap items-center justify-end gap-3">

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { ApplicationDetail } from "@/components/ApplicationDetail";
 import { WorkflowError } from "@/server/store";
-import { fetchApplication } from "@/server/gateway";
+import { fetchApplication, screeningIsAutomatic } from "@/server/gateway";
 
 export const metadata: Metadata = {
   title: "Application status · Visa Application Portal",
@@ -29,6 +29,7 @@ export default async function ApplicationPage(
     <ApplicationDetail
       initial={application}
       justSubmitted={submitted === "1"}
+      automaticScreening={screeningIsAutomatic}
     />
   );
 }

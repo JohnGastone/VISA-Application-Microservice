@@ -207,7 +207,11 @@ export function Dashboard({ initial }: { initial: VisaApplication[] }) {
                       {formatDateTime(app.applicationDate)}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
-                      {formatTzs(app.feeAmount)}
+                      {app.feeAmount === null ? (
+                        <span className="text-muted">—</span>
+                      ) : (
+                        formatTzs(app.feeAmount)
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <StatusBadge status={app.status} />

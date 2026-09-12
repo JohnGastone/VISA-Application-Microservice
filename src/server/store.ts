@@ -11,7 +11,6 @@
  */
 
 import {
-  VISA_FEES,
   type Applicant,
   type ApplicationEvent,
   type ApplicationStatus,
@@ -21,6 +20,16 @@ import {
   type VisaApplication,
   type VisaType,
 } from "@/lib/types";
+
+/**
+ * Fee table for the simulated Payment Service only. A real backend owns its
+ * own pricing and reports it on the transaction.
+ */
+const SIMULATED_FEES: Record<VisaType, number> = {
+  TOURIST: 130_000,
+  BUSINESS: 650_000,
+  STUDENT: 260_000,
+};
 
 export interface PaymentRequest {
   /** Channel the applicant paid with; recorded on the transaction reference. */
@@ -176,7 +185,7 @@ export function createApplication(
     visaType: payload.visaType,
     expireDate: payload.expireDate,
     status: "PENDING",
-    feeAmount: VISA_FEES[payload.visaType],
+    feeAmount: SIMULATED_FEES[payload.visaType],
   };
   db.applications.set(row.id, row);
 

@@ -26,7 +26,6 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
-  VISA_FEES,
   type Applicant,
   type ApplicationEvent,
   type ApplicationStatus,
@@ -391,10 +390,10 @@ async function compose(
     visaType: row.visaType,
     expireDate: row.expireDate,
     status: row.status,
-    // The application resource carries no fee, so the real amount is known
-    // only once a payment exists; before that we fall back to the published
-    // schedule so the payment screen can still quote a figure.
-    feeAmount: payment?.amount ?? VISA_FEES[row.visaType],
+    // The application resource carries no fee upstream, so the amount is
+    // known only once a payment exists. The UI shows nothing rather than a
+    // guess.
+    feeAmount: payment?.amount ?? null,
     backgroundCheck: check,
     payments: payment ? [payment] : [],
     events: deriveEvents(row, check, payment),
@@ -487,14 +486,29 @@ export async function payFee(
   id: string,
   request: PaymentRequest,
 ): Promise<VisaApplication> {
-  await send<UpstreamPayment>(upstream, `/payments/${id}/pay`, {
-    method: "POST",
-    // The endpoint takes no body; the channel is sent for the services to log
-    // if they choose, and is ignored today.
-    body: { method: request.method, payerReference: request.payerReference },
-  });
+  const payment = await send<UpstreamPayment>(
+    upstream,
+    `/payments/${id}/pay`,
+    {
+      method: "POST",
+      // The endpoint takes no body; the channel is sent for the services to
+      // log if they choose, and is ignored today.
+      body: { method: request.method, payerReference: request.payerReference },
+    },
+  );
 
-  return fetchApplication(upstream, id);
+  // The services commit the status change just after the charge returns, so a
+  // straight re-read still says BACKGROUND_CLEARED and the UI would offer the
+  // payment form again. Give the transition a moment to land.
+  const settled = payment.paymentStatus === "SUCCESS" ? "ACCEPTED" : "PAYMENT_FAILED";
+  let application = await fetchApplication(upstream, id);
+
+  for (let attempt = 0; attempt < 6 && application.status !== settled; attempt++) {
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    application = await fetchApplication(upstream, id);
+  }
+
+  return application;
 }
 
 export function makeUpstream(

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Erd } from "@/components/Erd";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Card, CardHeader } from "@/components/ui";
-import { APPLICATION_STATUSES, VISA_FEES, formatTzs } from "@/lib/types";
+import { APPLICATION_STATUSES } from "@/lib/types";
 
 export const metadata: Metadata = {
   title: "ERD & API · Visa Application Portal",
@@ -298,19 +298,18 @@ export default function DocsPage() {
 
       <Card>
         <CardHeader
-          title="Fee schedule"
-          description="Charged by the Payment Service in Tanzanian Shillings."
+          title="Fees"
+          description="Owned by the Payment Service, never by this UI."
         />
-        <dl className="grid gap-4 px-5 py-5 sm:grid-cols-3">
-          {Object.entries(VISA_FEES).map(([type, amount]) => (
-            <div key={type}>
-              <dt className="text-xs text-muted">{type}</dt>
-              <dd className="mt-0.5 text-lg font-semibold tracking-tight">
-                {formatTzs(amount)}
-              </dd>
-            </div>
-          ))}
-        </dl>
+        <p className="px-5 py-4 text-sm text-muted">
+          A visa type does not carry a price here. The amount is whatever the
+          Payment Service charges, and it reaches the UI on the transaction as{" "}
+          <code className="font-mono text-xs">amount</code> with{" "}
+          <code className="font-mono text-xs">currency: &quot;TZS&quot;</code>.
+          Until a payment exists the UI shows no figure rather than guessing
+          one. Expose <code className="font-mono text-xs">feeAmount</code> on
+          the application resource and it will be quoted before payment too.
+        </p>
       </Card>
 
       <Card>

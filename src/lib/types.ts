@@ -79,7 +79,11 @@ export interface VisaApplication {
   visaType: VisaType;
   expireDate: string;
   status: ApplicationStatus;
-  feeAmount: number;
+  /**
+   * Set by the Payment Service. `null` until a payment exists, because the
+   * fee is the backend's to decide — the UI never quotes a figure of its own.
+   */
+  feeAmount: number | null;
   backgroundCheck: BackgroundCheck | null;
   payments: PaymentTransaction[];
   events: ApplicationEvent[];
@@ -91,13 +95,6 @@ export interface SubmitApplicationPayload {
   visaType: VisaType;
   expireDate: string;
 }
-
-/** Visa fee schedule, in TZS. */
-export const VISA_FEES: Record<VisaType, number> = {
-  TOURIST: 130_000,
-  BUSINESS: 650_000,
-  STUDENT: 260_000,
-};
 
 /** Statuses from which no further workflow action is possible. */
 export const TERMINAL_STATUSES: ApplicationStatus[] = [

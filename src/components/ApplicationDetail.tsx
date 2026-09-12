@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ApiError, api, type PaymentInput } from "@/lib/api";
 import {
   formatDate,
@@ -18,6 +18,7 @@ import {
   CardHeader,
   DetailRow,
   Field,
+  Spinner,
 } from "@/components/ui";
 
 const METHOD_LABELS: Record<PaymentInput["method"], string> = {
@@ -64,6 +65,23 @@ export function ApplicationDetail({
       setWorking(null);
     }
   }
+
+  // Live, the background check lands on its own, so poll while it is pending.
+  const pendingScreening = automaticScreening && application.status === "PENDING";
+
+  useEffect(() => {
+    if (!pendingScreening) return;
+
+    const timer = setInterval(async () => {
+      try {
+        setApplication(await api.getApplication(application.id));
+      } catch {
+        // Leave the last good state on screen; the next tick retries.
+      }
+    }, 4000);
+
+    return () => clearInterval(timer);
+  }, [pendingScreening, application.id]);
 
   const { applicant, backgroundCheck, payments, status } = application;
   const lastPayment = payments.at(-1) ?? null;
@@ -202,7 +220,16 @@ export function ApplicationDetail({
               label="Expiry date"
               value={formatDate(application.expireDate)}
             />
-            <DetailRow label="Fee" value={formatTzs(application.feeAmount)} />
+            <DetailRow
+              label="Fee"
+              value={
+                application.feeAmount === null ? (
+                  <span className="text-muted">Set at payment</span>
+                ) : (
+                  formatTzs(application.feeAmount)
+                )
+              }
+            />
             <DetailRow
               label="Status"
               value={<StatusBadge status={status} showRaw />}
@@ -379,7 +406,9 @@ function PaymentPanel({
           <div>
             <p className="text-xs text-muted">Amount due</p>
             <p className="text-2xl font-semibold tracking-tight">
-              {formatTzs(application.feeAmount)}
+              {application.feeAmount === null
+                ? "Quoted by the Payment Service"
+                : formatTzs(application.feeAmount)}
             </p>
           </div>
           <p className="text-xs text-muted">
@@ -451,7 +480,9 @@ function PaymentPanel({
           <Button type="submit" loading={working}>
             {working
               ? "Processing…"
-              : `Pay ${formatTzs(application.feeAmount)}`}
+              : application.feeAmount === null
+                ? "Pay the visa fee"
+                : `Pay ${formatTzs(application.feeAmount)}`}
           </Button>
         </div>
       </form>
