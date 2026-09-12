@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Local index of application ids (no list endpoint upstream)
+.visa-known-applications.json

@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "mock": "node tools/collection-mock.mjs",
+    "dev:mock": "APPLICATION_SERVICE_URL=http://localhost:4010 APPLICATION_SERVICE_PREFIX= APPLICATION_SERVICE_MOCK=true next dev"
   },
   "dependencies": {
     "next": "16.3.5",

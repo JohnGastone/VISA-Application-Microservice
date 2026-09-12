@@ -84,11 +84,75 @@ export default function DocsPage() {
         <p className="mt-1 max-w-2xl text-sm text-muted">
           The schema and endpoints this SPA is built against. The UI talks only
           to its own <code className="font-mono text-xs">/api/*</code> routes,
-          which forward to the Application Service when{" "}
-          <code className="font-mono text-xs">APPLICATION_SERVICE_URL</code> is
-          configured and otherwise serve an in-memory simulation.
+          which forward to whatever{" "}
+          <code className="font-mono text-xs">APPLICATION_SERVICE_URL</code>{" "}
+          points at — the real services, or a Postman mock of the collection
+          below — and otherwise serve an in-memory simulation.
         </p>
       </div>
+
+      <Card>
+        <CardHeader
+          title="Where the data is coming from"
+          description="Set by environment variables; no code changes needed to switch."
+        />
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-2xl border-collapse text-sm">
+            <thead>
+              <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-muted">
+                <th scope="col" className="px-5 py-2.5 font-semibold">
+                  Backend
+                </th>
+                <th scope="col" className="px-5 py-2.5 font-semibold">
+                  Configuration
+                </th>
+                <th scope="col" className="px-5 py-2.5 font-semibold">
+                  Behaviour
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr className="border-b border-line align-top">
+                <td className="px-5 py-3 font-medium">In-memory simulation</td>
+                <td className="px-5 py-3 font-mono text-xs text-muted">
+                  nothing set
+                </td>
+                <td className="px-5 py-3 text-muted">
+                  Stateful. Real transitions, guard rails and seeded demo data.
+                </td>
+              </tr>
+              <tr className="border-b border-line align-top">
+                <td className="px-5 py-3 font-medium">
+                  Postman mock of the collection
+                </td>
+                <td className="px-5 py-3 font-mono text-xs text-muted">
+                  APPLICATION_SERVICE_URL=&lt;mock&gt;
+                  <br />
+                  APPLICATION_SERVICE_PREFIX=
+                  <br />
+                  APPLICATION_SERVICE_MOCK=true
+                </td>
+                <td className="px-5 py-3 text-muted">
+                  Stateless. Replays saved examples, so each screen shows its
+                  scripted response. Run it locally with{" "}
+                  <code className="font-mono text-xs">npm run dev:mock</code>.
+                </td>
+              </tr>
+              <tr className="align-top">
+                <td className="px-5 py-3 font-medium">Real microservices</td>
+                <td className="px-5 py-3 font-mono text-xs text-muted">
+                  APPLICATION_SERVICE_URL=&lt;base&gt;
+                  <br />
+                  APPLICATION_SERVICE_PREFIX=/api/v1
+                </td>
+                <td className="px-5 py-3 text-muted">
+                  Stateful, once the services honour the contract below.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </Card>
 
       <Card>
         <CardHeader
@@ -200,16 +264,36 @@ export default function DocsPage() {
             </tbody>
           </table>
         </div>
-        <p className="border-t border-line px-5 py-3 text-xs text-muted">
-          The machine-readable contract is served at{" "}
-          <a
-            href="/openapi.json"
-            className="font-mono text-accent hover:underline"
-          >
-            /openapi.json
-          </a>{" "}
-          and can be pasted straight into Swagger UI.
-        </p>
+        <div className="border-t border-line px-5 py-3 text-xs text-muted">
+          <p>
+            Machine-readable contracts:{" "}
+            <a
+              href="/openapi.json"
+              className="font-mono text-accent hover:underline"
+            >
+              /openapi.json
+            </a>{" "}
+            loads straight into Swagger UI, and{" "}
+            <a
+              href="/visa-api.postman_collection.json"
+              className="font-mono text-accent hover:underline"
+            >
+              /visa-api.postman_collection.json
+            </a>{" "}
+            imports into Postman.
+          </p>
+          <p className="mt-1.5">
+            The collection runs end to end — it walks one application from{" "}
+            <code className="font-mono">PENDING</code> to{" "}
+            <code className="font-mono">ACCEPTED</code>, then checks every guard
+            rail. Point its <code className="font-mono">baseUrl</code> variable
+            at your service to verify it against the real backend:{" "}
+            <code className="font-mono">
+              newman run visa-api.postman_collection.json --env-var
+              baseUrl=http://localhost:8080/api/v1
+            </code>
+          </p>
+        </div>
       </Card>
 
       <Card>

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import Image from "next/image";
 import Link from "next/link";
 import "./globals.css";
 import { NavLinks } from "@/components/NavLinks";
@@ -29,19 +30,24 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="min-h-full flex flex-col">
         <header className="sticky top-0 z-20 border-b border-line bg-surface/85 backdrop-blur">
           <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-3 px-4 py-3 sm:px-6">
-            <Link href="/" className="flex items-center gap-2.5">
-              <span
-                aria-hidden
-                className="flex size-8 items-center justify-center rounded-lg bg-accent text-sm font-bold text-accent-contrast"
-              >
-                TZ
-              </span>
+            <Link href="/" className="flex items-center gap-3">
+              <Image
+                src="/immigration-logo.png"
+                alt="Tanzania Immigration Department"
+                width={80}
+                height={80}
+                priority
+                sizes="40px"
+                // The emblem's navy banners sit close to the dark ground, so
+                // it gets a light plate there and none in light mode.
+                className="h-10 w-auto rounded-md dark:bg-white/90 dark:p-0.5"
+              />
               <span className="leading-tight">
                 <span className="block text-sm font-semibold tracking-tight">
                   Visa Application Portal
                 </span>
                 <span className="block text-[11px] text-muted">
-                  Directorate of Immigration Services
+                  Tanzania Immigration Department
                 </span>
               </span>
             </Link>

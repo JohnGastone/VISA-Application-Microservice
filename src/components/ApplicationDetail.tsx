@@ -29,9 +29,15 @@ const METHOD_LABELS: Record<PaymentInput["method"], string> = {
 export function ApplicationDetail({
   initial,
   justSubmitted,
+  automaticScreening = false,
 }: {
   initial: VisaApplication;
   justSubmitted: boolean;
+  /**
+   * True when the backend screens applicants on its own, with no endpoint to
+   * trigger a check — then the UI polls instead of offering a button.
+   */
+  automaticScreening?: boolean;
 }) {
   const [application, setApplication] = useState(initial);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -121,14 +127,23 @@ export function ApplicationDetail({
               Screening runs automatically against immigration, criminal-record
               and watch-list datasets. Clearing it unlocks the fee payment.
             </p>
-            <Button
-              loading={working === "check"}
-              onClick={() =>
-                void run("check", () => api.runBackgroundCheck(application.id))
-              }
-            >
-              {working === "check" ? "Screening…" : "Run background check"}
-            </Button>
+            {automaticScreening ? (
+              <p className="flex items-center gap-2 text-sm font-medium text-accent">
+                <Spinner />
+                Waiting for the result…
+              </p>
+            ) : (
+              <Button
+                loading={working === "check"}
+                onClick={() =>
+                  void run("check", () =>
+                    api.runBackgroundCheck(application.id),
+                  )
+                }
+              >
+                {working === "check" ? "Screening…" : "Run background check"}
+              </Button>
+            )}
           </div>
         </Card>
       ) : null}

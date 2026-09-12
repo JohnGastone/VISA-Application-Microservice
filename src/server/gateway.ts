@@ -1,14 +1,23 @@
 /**
  * Backend selection for the BFF route handlers.
  *
- * The UI always talks to its own `/api/*` routes. Those routes then either
+ * The UI always talks to its own `/api/*` routes. Those routes then use one of
+ * three backends, chosen by environment variable:
  *
- *  - forward to the real Application Service (when `APPLICATION_SERVICE_URL`
- *    is set, usually the API gateway address), or
- *  - fall back to the in-memory simulation in `store.ts`.
+ *   live        `APPLICATION_SERVICE_URL` set — the real microservices behind
+ *               the API gateway. Shapes are adapted in `upstream.ts`.
+ *   mock        ...plus `APPLICATION_SERVICE_MOCK=true` — a Postman mock of
+ *               `public/visa-api.postman_collection.json`, replaying examples.
+ *   simulation  nothing set — the stateful in-memory model in `store.ts`.
  *
- * That keeps the SPA runnable on its own while making the switch to the real
- * microservices a matter of setting one environment variable.
+ *   APPLICATION_SERVICE_PREFIX   Path prefix on the upstream. Defaults to
+ *                                `/api`, which is what the deployed gateway
+ *                                serves; use an empty string for a Postman
+ *                                mock, whose paths start at `/applications`.
+ *   APPLICATION_SERVICE_API_KEY  Sent as `x-api-key` when set.
+ *   APPLICATION_SEED_IDS         Comma-separated application ids to show on
+ *                                the dashboard, since the live API has no list
+ *                                endpoint.
  */
 
 import type { SubmitApplicationPayload, VisaApplication } from "@/lib/types";
@@ -21,27 +30,78 @@ import {
   runBackgroundCheck,
   type PaymentRequest,
 } from "./store";
+import * as upstream from "./upstream";
 
 const BASE_URL = process.env.APPLICATION_SERVICE_URL?.replace(/\/$/, "");
 
-export const backendMode: "live" | "mock" = BASE_URL ? "live" : "mock";
+const PREFIX = (process.env.APPLICATION_SERVICE_PREFIX ?? "/api").replace(
+  /\/$/,
+  "",
+);
 
-async function call<T>(
+const API_KEY = process.env.APPLICATION_SERVICE_API_KEY;
+
+const IS_MOCK = process.env.APPLICATION_SERVICE_MOCK === "true";
+
+export type BackendMode = "simulation" | "mock" | "live";
+
+export const backendMode: BackendMode = !BASE_URL
+  ? "simulation"
+  : IS_MOCK
+    ? "mock"
+    : "live";
+
+/** True when the backend runs the background check on its own. */
+export const screeningIsAutomatic = backendMode === "live";
+
+const target = BASE_URL
+  ? upstream.makeUpstream(BASE_URL, PREFIX, API_KEY)
+  : null;
+
+/* -------------------------------------------------------------------------- */
+/* Postman mock transport                                                     */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * A mock replays saved examples and ignores the request body, so each call
+ * names the example it wants: five collection requests share
+ * `POST /applications`, and the decline path has to be asked for explicitly.
+ */
+async function fromMock<T>(
   path: string,
-  init?: { method: string; body?: unknown },
+  example: string,
+  init: { method?: string; body?: unknown } = {},
 ): Promise<T> {
-  const response = await fetch(`${BASE_URL}${path}`, {
-    method: init?.method ?? "GET",
-    headers: { "Content-Type": "application/json" },
-    body: init?.body ? JSON.stringify(init.body) : undefined,
-    cache: "no-store",
-  });
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+    "x-mock-response-name": example,
+  };
+  if (init.body) headers["Content-Type"] = "application/json";
+  if (API_KEY) headers["x-api-key"] = API_KEY;
+
+  let response: Response;
+  try {
+    response = await fetch(`${BASE_URL}${PREFIX}${path}`, {
+      method: init.method ?? "GET",
+      headers,
+      body: init.body ? JSON.stringify(init.body) : undefined,
+      cache: "no-store",
+    });
+  } catch (cause) {
+    throw new WorkflowError(
+      `Cannot reach the mock at ${BASE_URL}. ${
+        cause instanceof Error ? cause.message : "Connection failed."
+      }`,
+      502,
+    );
+  }
+
+  const text = await response.text();
 
   if (!response.ok) {
-    const detail = await response.text();
-    let message = detail || `${response.status} ${response.statusText}`;
+    let message = text || `${response.status} ${response.statusText}`;
     try {
-      const parsed = JSON.parse(detail);
+      const parsed = JSON.parse(text) as { message?: string; detail?: string };
       message = parsed.message ?? parsed.detail ?? message;
     } catch {
       // Not JSON: keep the raw body as the message.
@@ -49,45 +109,81 @@ async function call<T>(
     throw new WorkflowError(message, response.status);
   }
 
-  return (await response.json()) as T;
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new WorkflowError(
+      `The mock returned a non-JSON response (${response.status}).`,
+      502,
+    );
+  }
 }
 
+/* -------------------------------------------------------------------------- */
+/* Operations                                                                 */
+/* -------------------------------------------------------------------------- */
+
 export async function fetchApplications(): Promise<VisaApplication[]> {
-  if (!BASE_URL) return listApplications();
-  return call<VisaApplication[]>("/api/v1/applications");
+  if (!target) return listApplications();
+  if (IS_MOCK) {
+    return fromMock<VisaApplication[]>("/applications", "200 · Dashboard list");
+  }
+  return upstream.fetchApplications(target);
 }
 
 export async function fetchApplication(id: string): Promise<VisaApplication> {
-  if (!BASE_URL) return getApplication(id);
-  return call<VisaApplication>(`/api/v1/applications/${id}`);
+  if (!target) return getApplication(id);
+  if (IS_MOCK) {
+    return fromMock<VisaApplication>(
+      `/applications/${id}`,
+      "200 · Awaiting payment",
+    );
+  }
+  return upstream.fetchApplication(target, id);
 }
 
 export async function submitApplication(
   payload: SubmitApplicationPayload,
 ): Promise<VisaApplication> {
-  if (!BASE_URL) return createApplication(payload);
-  return call<VisaApplication>("/api/v1/applications", {
-    method: "POST",
-    body: payload,
-  });
+  if (!target) return createApplication(payload);
+  if (IS_MOCK) {
+    return fromMock<VisaApplication>("/applications", "201 · Created", {
+      method: "POST",
+      body: payload,
+    });
+  }
+  return upstream.submitApplication(target, payload);
 }
 
+/**
+ * Live, screening is automatic and there is no endpoint to trigger it, so this
+ * re-reads the application; the UI polls it while the status is PENDING.
+ */
 export async function requestBackgroundCheck(
   id: string,
 ): Promise<VisaApplication> {
-  if (!BASE_URL) return runBackgroundCheck(id);
-  return call<VisaApplication>(`/api/v1/applications/${id}/background-check`, {
-    method: "POST",
-  });
+  if (!target) return runBackgroundCheck(id);
+  if (IS_MOCK) {
+    return fromMock<VisaApplication>(
+      `/applications/${id}/background-check`,
+      "200 · Cleared",
+      { method: "POST" },
+    );
+  }
+  return upstream.refreshBackgroundCheck(target, id);
 }
 
 export async function submitPayment(
   id: string,
   request: PaymentRequest,
 ): Promise<VisaApplication> {
-  if (!BASE_URL) return processPayment(id, request);
-  return call<VisaApplication>(`/api/v1/applications/${id}/payments`, {
-    method: "POST",
-    body: request,
-  });
+  if (!target) return processPayment(id, request);
+  if (IS_MOCK) {
+    return fromMock<VisaApplication>(
+      `/applications/${id}/payments`,
+      request.simulateFailure ? "201 · Declined" : "201 · Paid and accepted",
+      { method: "POST", body: request },
+    );
+  }
+  return upstream.payFee(target, id, request);
 }
