@@ -30,7 +30,6 @@ import {
   type ApplicationEvent,
   type ApplicationStatus,
   type BackgroundCheck,
-  type Gender,
   type PaymentTransaction,
   type SubmitApplicationPayload,
   type VisaApplication,
@@ -170,6 +169,29 @@ async function optional<T>(promise: Promise<T>): Promise<T | null> {
   }
 }
 
+/**
+ * For the joined child resources. A 404 means "not yet", but one service
+ * being unhealthy must not blank the page — the application is still worth
+ * showing without its check or payment, so the failure is logged and the
+ * section renders empty.
+ */
+async function tolerant<T>(
+  promise: Promise<T>,
+  what: string,
+): Promise<T | null> {
+  try {
+    return await promise;
+  } catch (error) {
+    if (error instanceof NotFound) return null;
+    console.warn(
+      `[visa-upstream] ${what} unavailable: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+    return null;
+  }
+}
+
 /* -------------------------------------------------------------------------- */
 /* Known application ids                                                      */
 /* -------------------------------------------------------------------------- */
@@ -234,9 +256,15 @@ function persist(): void {
 /* Mapping                                                                    */
 /* -------------------------------------------------------------------------- */
 
-function normaliseGender(value: string): Gender {
-  const upper = value?.toUpperCase();
-  return upper === "MALE" || upper === "FEMALE" ? upper : "OTHER";
+/**
+ * The services store gender as free text ("Female", "FEMALE"). Known values
+ * are normalised to the form's casing; anything else is passed through as
+ * stored, so a record is never relabelled.
+ */
+function normaliseGender(value: string): string {
+  const upper = value?.trim().toUpperCase();
+  if (upper === "MALE" || upper === "FEMALE") return upper;
+  return value?.trim() || "—";
 }
 
 /** Fills in an applicant when `/api/applicants` has no match for the id. */
@@ -246,7 +274,7 @@ function placeholderApplicant(row: UpstreamApplication): Applicant {
     fullname: row.applicantFullName,
     passportNumber: "—",
     country: "—",
-    gender: "OTHER",
+    gender: "—",
     phone: "—",
     email: "—",
   };
@@ -361,7 +389,10 @@ async function applicantsById(
   upstream: Upstream,
 ): Promise<Map<string, Applicant>> {
   const rows =
-    (await optional(send<UpstreamApplicant[]>(upstream, "/applicants"))) ?? [];
+    (await tolerant(
+      send<UpstreamApplicant[]>(upstream, "/applicants"),
+      "applicant directory",
+    )) ?? [];
   return new Map(rows.map((row) => [row.id, toApplicant(row)]));
 }
 
@@ -372,10 +403,14 @@ async function compose(
   applicants?: Map<string, Applicant>,
 ): Promise<VisaApplication> {
   const [checkRow, paymentRow, lookup] = await Promise.all([
-    optional(
+    tolerant(
       send<UpstreamBackgroundCheck>(upstream, `/background-checks/${row.id}`),
+      `background check for ${row.id}`,
     ),
-    optional(send<UpstreamPayment>(upstream, `/payments/${row.id}`)),
+    tolerant(
+      send<UpstreamPayment>(upstream, `/payments/${row.id}`),
+      `payment for ${row.id}`,
+    ),
     applicants ? Promise.resolve(applicants) : applicantsById(upstream),
   ]);
 
@@ -412,21 +447,43 @@ export async function fetchApplications(
 
   const applicants = await applicantsById(upstream);
 
-  const rows = await Promise.all(
+  const reads = await Promise.all(
     ids.map((id) =>
-      optional(send<UpstreamApplication>(upstream, `/applications/${id}`)),
+      send<UpstreamApplication>(upstream, `/applications/${id}`)
+        .then((row) => ({ row, missing: false }))
+        .catch((error) => {
+          if (error instanceof NotFound) return { row: null, missing: true };
+          console.warn(`[visa-upstream] application ${id} unavailable:`, error);
+          return { row: null, missing: false };
+        }),
     ),
   );
 
-  const applications = await Promise.all(
+  const rows = reads.map((read) => read.row);
+
+  const settled = await Promise.allSettled(
     rows
       .filter((row): row is UpstreamApplication => row !== null)
       .map((row) => compose(upstream, row, applicants)),
   );
 
-  // Drop ids the services no longer recognise, so the dashboard stays honest.
-  for (const [index, row] of rows.entries()) {
-    if (row === null) forget(ids[index]);
+  const applications = settled
+    .filter(
+      (result): result is PromiseFulfilledResult<VisaApplication> =>
+        result.status === "fulfilled",
+    )
+    .map((result) => result.value);
+
+  for (const result of settled) {
+    if (result.status === "rejected") {
+      console.warn("[visa-upstream] dropping an application:", result.reason);
+    }
+  }
+
+  // Retire ids the services no longer recognise, so the dashboard stays
+  // honest — but keep ids that merely failed this time.
+  for (const [index, read] of reads.entries()) {
+    if (read.missing) forget(ids[index]);
   }
 
   return applications.sort((a, b) =>

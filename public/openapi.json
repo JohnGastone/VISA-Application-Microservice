@@ -228,7 +228,7 @@
           "country": { "type": "string", "example": "Tanzania" },
           "gender": {
             "type": "string",
-            "enum": ["MALE", "FEMALE", "OTHER"]
+            "enum": ["MALE", "FEMALE"]
           },
           "phone": { "type": "string", "example": "+255 712 345 678" },
           "email": {
@@ -366,7 +366,7 @@
               "country": { "type": "string" },
               "gender": {
                 "type": "string",
-                "enum": ["MALE", "FEMALE", "OTHER"]
+                "enum": ["MALE", "FEMALE"]
               },
               "phone": { "type": "string" },
               "email": { "type": "string", "format": "email" }

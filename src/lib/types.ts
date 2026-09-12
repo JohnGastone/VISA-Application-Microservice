@@ -17,7 +17,7 @@ export type ApplicationStatus = (typeof APPLICATION_STATUSES)[number];
 export const VISA_TYPES = ["TOURIST", "BUSINESS", "STUDENT"] as const;
 export type VisaType = (typeof VISA_TYPES)[number];
 
-export const GENDERS = ["MALE", "FEMALE", "OTHER"] as const;
+export const GENDERS = ["MALE", "FEMALE"] as const;
 export type Gender = (typeof GENDERS)[number];
 
 export type BackgroundCheckStatus = "CLEARED" | "FAILED";
@@ -28,7 +28,12 @@ export interface Applicant {
   fullname: string;
   passportNumber: string;
   country: string;
-  gender: Gender;
+  /**
+   * What the services returned. The form only submits `MALE` or `FEMALE`, but
+   * existing records carry values like "Female", so this is displayed as
+   * stored rather than coerced into an enum.
+   */
+  gender: string;
   phone: string;
   email: string;
 }

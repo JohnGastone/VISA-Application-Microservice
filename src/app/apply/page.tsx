@@ -19,7 +19,6 @@ import { Alert, Button, Card, CardHeader, Field } from "@/components/ui";
 const GENDER_LABELS: Record<string, string> = {
   MALE: "Male",
   FEMALE: "Female",
-  OTHER: "Other",
 };
 
 export default function ApplyPage() {
