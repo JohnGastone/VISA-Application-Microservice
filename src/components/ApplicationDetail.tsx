@@ -18,7 +18,6 @@ import {
   CardHeader,
   DetailRow,
   Field,
-  Spinner,
 } from "@/components/ui";
 
 const METHOD_LABELS: Record<PaymentInput["method"], string> = {
